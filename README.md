@@ -2,11 +2,17 @@
 
 This ongoing project aims at converting a given Tensorflow model into a torch.nn.Module counter-part.
 
-## Requirements
+## Setup
+To install, simply run
+```
+$ python3 -m pip -e . -r requirements.txt
+```
+Note that current requirements are:
 - pytorch >= 1.09
 - tensorflow >= 2.5.0
 - numpy >= 1.19.5
-Note:: The tool may work with earlier versions of Tensorflow and Pytorch.
+
+but the tool may work with earlier versions of Tensorflow and Pytorch.
 
 ## Manual
 The conversion is pretty straightforward:
