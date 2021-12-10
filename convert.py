@@ -2,7 +2,7 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-from tf_convert import TFConvertedModel
+from tf2torch import TFConvertedModel
 import torch
 import numpy as np
 from argparse import RawTextHelpFormatter
