@@ -41,10 +41,11 @@ Conv2D
 BatchNormalization
 MaxPooling2D
 ZeroPadding2D
+Softmax (2D only)
 ```
 
 ## Supporting new layers
-The layer conversion is performed in the *convert_layer* function located in [layers.py](https://github.com/romain-xu-darme/tf2torch/blob/main/layers.py)
+The layer conversion is performed in the *convert_layer* function located in [tf_converter.py](https://github.com/romain-xu-darme/tf2torch/blob/main/tf_converter.py)
 In order to add support for new types of layers:
 1) Identify the layer name, which corresponds to the *src* input layer class name, stripped of all module prefixes. *E.g.* *tensorflow.python.keras.layers.normalization_v2.BatchNormalization* becomes *BatchNormalization*
 2) If the Tensorflow source layer does not correspond to a predefined Pytorch module, create a new nn.Module (see "Add" module provided in the code)
