@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import tensorflow as tf
-from typing import List
+from typing import List, Dict, Tuple
 import numpy as np
 
 class Add (nn.Module):
@@ -122,4 +122,78 @@ def convert_layer (src: tf.keras.layers) -> nn.Module:
 
     assert False, f'Layer {tname} not implemented (yet?)'
 
+def convert_model (source: tf.keras.Model) -> Tuple[Dict,List,Dict]:
+    """ Convert a Tensorflow model
+    Args:
+        source (tf.keras.Model): Source Tensorflow model
+    Returns:
+        Dictionnary containing layer names and associated nn.Module
+        List of layer names corresponding to execution order during forward pass
+        Dictionnary containing execution configuration for each layer
+    """
+    ##############################
+    # Build graph
+    ##############################
+    inputs = []
+    layers_conf = {}
 
+    # First pass: Convert and find all inbound nodes for all layers
+    layers_func = {}
+    for layer in source.layers:
+        name = layer.name
+        layers_conf[name] = {}
+        layers_conf[name]['inbounds'] = []
+        layers_conf[name]['outbounds'] = []
+        metadata = layer._serialized_attributes['metadata']
+        if 'inbound_nodes' in metadata.keys():
+            # Convert TF layer into Torch
+            layers_func[name] = convert_layer(layer)
+            # Find inbound nodes
+            inbounds = metadata['inbound_nodes'][0]
+            for ip in range(len(inbounds)):
+                inbound = inbounds[ip][0]
+                layers_conf[name]['inbounds'].append(inbound)
+        else:
+            inputs.append(name)
+
+    # Second pass: For each node, find outbound nodes
+    for name in layers_conf:
+        for inbound in layers_conf[name]['inbounds']:
+            layers_conf[inbound]['outbounds'].append(name)
+
+    # Third pass: Find exec_order exec_order recursively
+    exec_order = []
+    def add_children(name: str):
+        if name in exec_order: return
+        for inbound in layers_conf[name]['inbounds']:
+            # Missing inbound node, can't execute this node yet
+            if inbound not in exec_order: return
+        # Inbound nodes already in exec_order list
+        exec_order.append(name)
+        for outbound in layers_conf[name]['outbounds']:
+            add_children(outbound)
+        return
+    for name in inputs:
+        add_children(name)
+
+    # Fourth pass: Compute index of inbound tensors
+    exec_conf = {}
+    stack = inputs.copy()
+    for idx, name in enumerate(exec_order):
+        exec_conf[name] = {'src_index': [], 'save': False}
+        if name in inputs: continue
+        for inbound in layers_conf[name]['inbounds']:
+            # Simple case: use previous tensor
+            if exec_order[idx-1] == inbound: exec_conf[name]['src_index'].append(-1)
+            # Or find index in stack of tensors
+            else:
+                exec_conf[name]['src_index'].append(stack.index(inbound))
+        # If tensor value is not used straight away, save it
+        noutbounds = len(layers_conf[name]['outbounds'])
+        if (noutbounds > 1) or \
+                (noutbounds == 1 and exec_order[idx+1] != layers_conf[name]['outbounds'][0]) :
+            exec_conf[name]['save'] = True
+            stack.append(name)
+
+    exec_order = exec_order[len(inputs):] # Skip inputs
+    return layers_func, exec_order, exec_conf

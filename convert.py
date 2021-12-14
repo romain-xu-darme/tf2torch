@@ -2,7 +2,8 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-from tf2torch import TFConvertedModel
+from model import ConvertedModel
+from tf_converter import convert_model
 import torch
 import numpy as np
 from argparse import RawTextHelpFormatter
@@ -36,7 +37,8 @@ if __name__ == '__main__':
     if args.verbose: tf_model.summary()
 
     # Convert model and save
-    pt_model = TFConvertedModel(tf_model)
+    layers, exec_order, exec_conf = convert_model(tf_model)
+    pt_model = ConvertedModel(layers, exec_order, exec_conf)
     torch.save(pt_model,args.output)
     if args.verbose: print(pt_model)
 
