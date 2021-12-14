@@ -20,6 +20,18 @@ class Add (nn.Module):
         assert len(X) >= 2
         return X[0]+X[1]
 
+class ChannelWiseSoftmax(nn.Module):
+    """ Channel-wise Softmax
+    When given a tensor of shape ``N x C x H x W``, apply
+    Softmax to each channel
+    """
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        assert input.dim() == 4, 'ChannelWiseSoftmax requires a 4D tensor as input'
+        # Reshape tensor to N x C x (H x W)
+        reshaped  = input.view(*input.size()[:2], -1)
+        # Apply softmax along 2nd dimension than reshape to original
+        return nn.Softmax(2)(reshaped).view_as(input)
+
 def convert_layer (src: tf.keras.layers) -> nn.Module:
     """ Given a Tensorflow layer, returns corresponding Pytorch layer
     Args:
@@ -100,6 +112,13 @@ def convert_layer (src: tf.keras.layers) -> nn.Module:
     #################################################
     if tname == "Add":
         return Add()
+
+    #################################################
+    if tname == "Softmax":
+        # Assume the following TF tensor format: N x H x W x C
+        naxis = len(src.axis)
+        assert src.axis == [1,2], f'Softmax axis support not implemented (yet?): {src.axis}'
+        return ChannelWiseSoftmax()
 
     assert False, f'Layer {tname} not implemented (yet?)'
 
