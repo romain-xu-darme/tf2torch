@@ -9,8 +9,7 @@ import numpy as np
 from argparse import RawTextHelpFormatter
 import argparse
 
-if __name__ == '__main__':
-
+def _main():
     ap = argparse.ArgumentParser(
         description='Convert tensorflow model to pytorch.',
         formatter_class=RawTextHelpFormatter)
@@ -52,3 +51,5 @@ if __name__ == '__main__':
     pt_out = np.moveaxis(pt_out,1,-1)
     print(f'Maximum absolute error on 10 inputs: {np.amax(np.abs(pt_out-tf_out))}')
 
+if __name__ == '__main__':
+    _main()
