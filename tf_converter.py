@@ -69,6 +69,8 @@ def convert_layer (src: tf.keras.layers) -> nn.Module:
             return pt_layer
         if aname == 'relu':
             return torch.nn.Sequential(pt_layer,torch.nn.ReLU())
+        if aname == 'sigmoid':
+            return torch.nn.Sequential(pt_layer,torch.nn.Sigmoid())
         assert False, f'Activation {aname} not implemented (yet?)'
         return pt_layer
 
@@ -93,6 +95,8 @@ def convert_layer (src: tf.keras.layers) -> nn.Module:
         aname = src.activation.__name__
         if aname == "relu":
             return torch.nn.ReLU()
+        if aname == "sigmoid":
+            return torch.nn.Sigmoid()
         assert False, f'Activation {aname} not implemented (yet?)'
 
     #################################################
