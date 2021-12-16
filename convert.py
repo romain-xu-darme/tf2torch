@@ -1,55 +1,66 @@
 #!/usr/bin/env python3
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-from model import ConvertedModel
-from tf_converter import convert_model
-import torch
-import numpy as np
 from argparse import RawTextHelpFormatter
 import argparse
 
 def _main():
     ap = argparse.ArgumentParser(
-        description='Convert tensorflow model to pytorch.',
+        description='Convert models.',
         formatter_class=RawTextHelpFormatter)
-    ap.add_argument('-m','--model', type=str, required=True,
+    subparsers = ap.add_subparsers(help='Conversion mode',dest='cmd')
+
+    tf2json_parser = subparsers.add_parser('tf2json')
+    tf2json_parser.add_argument('-m','--model', type=str, required=True,
         metavar=('<path_to_file>'),
         help='Path to Tensorflow source model.')
-    ap.add_argument('-o','--output', type=str, required=True,
-        metavar=('<path_to_file>'),
-        help='Path to Pytorch destination model.')
-    ap.add_argument('-l','--layer', type=str, required=False,
+    tf2json_parser.add_argument('-l','--layer', type=str, required=False,
         metavar=('<name>'),
         help='Last layer of source model.')
-    ap.add_argument('-v','--verbose',required=False,action='store_true',
+    tf2json_parser.add_argument('-j','--json', type=str, required=True,
+        metavar=('<path_to_file>'),
+        help='Path to output JSON file.')
+    tf2json_parser.add_argument('-v','--verbose',required=False,action='store_true',
         help='Verbose.')
+
+    json2pt_parser = subparsers.add_parser('json2torch')
+    json2pt_parser.add_argument('-j','--json', type=str, required=True,
+        metavar=('<path_to_file>'),
+        help='Path to input JSON file.')
+    json2pt_parser.add_argument('-m','--model', type=str, required=True,
+        metavar=('<path_to_file>'),
+        help='Path to Pytorch destination model.')
+    json2pt_parser.add_argument('-v','--verbose',required=False,action='store_true',
+        help='Verbose.')
+
     args = ap.parse_args()
 
-    # Load source
-    tf_model = tf.keras.models.load_model(args.model,compile=False)
-    if args.layer is not None:
-        lnames = [l.name for l in tf_model.layers]
-        if args.layer not in lnames:
-            ap.error(f'Invalid layer name {args.layer}. Choices: {lnames}')
-        tf_model = tf.keras.models.Model(tf_model.inputs,tf_model.get_layer(args.layer).output)
-    if args.verbose: tf_model.summary()
+    if args.cmd == 'tf2json':
+        import os
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        import tensorflow as tf
+        from tf2json import tfmodel2json
 
-    # Convert model and save
-    layers, exec_order, exec_conf = convert_model(tf_model)
-    pt_model = ConvertedModel(layers, exec_order, exec_conf)
-    torch.save(pt_model,args.output)
-    if args.verbose: print(pt_model)
+        # Load source
+        tf_model = tf.keras.models.load_model(args.model,compile=False)
+        if args.layer is not None:
+            lnames = [l.name for l in tf_model.layers]
+            if args.layer not in lnames:
+                ap.error(f'Invalid layer name {args.layer}. Choices: {lnames}')
+            tf_model = tf.keras.models.Model(tf_model.inputs,tf_model.get_layer(args.layer).output)
+        if args.verbose: tf_model.summary()
 
-    # Sanity check: Process random input through both models
-    tf_X = np.random.random([10]+list(tf_model.input_shape[1:]))
-    tf_out = tf_model.predict(tf_X)
-    loaded_pt_model = torch.load(args.output)
-    pt_X = torch.Tensor(np.moveaxis(tf_X,3,1))
-    loaded_pt_model.eval()
-    pt_out = loaded_pt_model(pt_X).detach().numpy()
-    pt_out = np.moveaxis(pt_out,1,-1)
-    print(f'Maximum absolute error on 10 inputs: {np.amax(np.abs(pt_out-tf_out))}')
+        # Convert model and save
+        tfmodel2json(tf_model,args.json)
+
+    elif args.cmd == 'json2torch':
+        from json2torch import ModelFromJson
+        import torch
+
+        # Load model from JSON file
+        pt_model = ModelFromJson(args.json)
+        if args.verbose: print(pt_model)
+
+        # Save to torch format
+        torch.save(pt_model,args.model)
 
 if __name__ == '__main__':
     _main()
