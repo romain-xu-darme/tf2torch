@@ -42,10 +42,10 @@ def _main():
         type=str,
         required=True,
         metavar="<path_to_file>",
-        help="Path to output JSON file.",
+        help="path to output JSON file.",
     )
     tf2json_parser.add_argument(
-        "-v", "--verbose", required=False, action="store_true", help="Verbose."
+        "-v", "--verbose", required=False, action="store_true", help="verbose mode."
     )
 
     json2pt_parser = subparsers.add_parser("json2torch")
@@ -55,7 +55,7 @@ def _main():
         type=str,
         required=True,
         metavar="<path_to_file>",
-        help="Path to input JSON file.",
+        help="path to input JSON file.",
     )
     json2pt_parser.add_argument(
         "-m",
@@ -63,10 +63,10 @@ def _main():
         type=str,
         required=True,
         metavar="<path_to_file>",
-        help="Path to Pytorch destination model.",
+        help="path to Pytorch destination model.",
     )
     json2pt_parser.add_argument(
-        "-v", "--verbose", required=False, action="store_true", help="Verbose."
+        "-v", "--verbose", required=False, action="store_true", help="verbose mode."
     )
 
     args = ap.parse_args()
