@@ -4,9 +4,7 @@ import argparse
 
 
 def _main():
-    ap = argparse.ArgumentParser(
-        description="Convert models.", formatter_class=RawTextHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description="Convert models.", formatter_class=RawTextHelpFormatter)
     subparsers = ap.add_subparsers(help="Conversion mode", dest="cmd")
 
     tf2json_parser = subparsers.add_parser("tf2json")
@@ -44,9 +42,7 @@ def _main():
         metavar="<path_to_file>",
         help="path to output JSON file.",
     )
-    tf2json_parser.add_argument(
-        "-v", "--verbose", required=False, action="store_true", help="verbose mode."
-    )
+    tf2json_parser.add_argument("-v", "--verbose", required=False, action="store_true", help="verbose mode.")
 
     json2pt_parser = subparsers.add_parser("json2torch")
     json2pt_parser.add_argument(
@@ -65,9 +61,7 @@ def _main():
         metavar="<path_to_file>",
         help="path to Pytorch destination model.",
     )
-    json2pt_parser.add_argument(
-        "-v", "--verbose", required=False, action="store_true", help="verbose mode."
-    )
+    json2pt_parser.add_argument("-v", "--verbose", required=False, action="store_true", help="verbose mode.")
 
     args = ap.parse_args()
 
@@ -108,6 +102,19 @@ def _main():
 
         # Save to torch format
         torch.save(pt_model, args.model)
+
+        # Sanity check: create a fake input with the correct size
+        batch_size = 16
+        x = []
+        for shape in pt_model.input_shapes:
+            batch_shape = [
+                batch_size,
+            ] + shape
+            x.append(torch.rand(batch_shape))
+        if len(x) == 1:
+            x = x[0]
+        y = pt_model(x)
+        print(f"Output shape: {y.shape}")
 
 
 if __name__ == "__main__":

@@ -64,14 +64,14 @@ class GlobalAveragePool2d(nn.AvgPool2d):
     def __init__(self, kernel_size: _size_2_t):
         super().__init__(kernel_size=kernel_size)
 
-    def forward(self, X: Tensor) -> Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         r"""Applies global average pooling on a given tensor
 
         Args:
-            X: Input tensor.
+            input: Input tensor.
         """
-        pooled_X = super().forward(X)
-        return pooled_X.flatten(start_dim=1)
+        pooled_input = super().forward(input)
+        return pooled_input.flatten(start_dim=1)
 
 
 class Conv2dSame(nn.Conv2d):
@@ -110,9 +110,7 @@ class Conv2dSame(nn.Conv2d):
         valid_padding_strings = {"same", "valid"}
         if isinstance(padding, str):
             if padding not in valid_padding_strings:
-                raise ValueError(
-                    f"Invalid padding string {padding!r}, should be one of {valid_padding_strings}"
-                )
+                raise ValueError(f"Invalid padding string {padding!r}, should be one of {valid_padding_strings}")
 
         valid_padding_modes = {"zeros", "reflect", "replicate", "circular"}
         if padding_mode not in valid_padding_modes:
@@ -136,15 +134,11 @@ class Conv2dSame(nn.Conv2d):
         if isinstance(self.padding, str):
             self._reversed_padding_repeated_twice = [0, 0] * len(kernel_size)
             if padding == "same":
-                for d, k, i in zip(
-                    dilation, kernel_size, range(len(kernel_size) - 1, -1, -1)
-                ):
+                for d, k, i in zip(dilation, kernel_size, range(len(kernel_size) - 1, -1, -1)):
                     total_padding = d * (k - 1)
                     left_pad = total_padding // 2
                     self._reversed_padding_repeated_twice[2 * i] = left_pad
-                    self._reversed_padding_repeated_twice[2 * i + 1] = (
-                        total_padding - left_pad
-                    )
+                    self._reversed_padding_repeated_twice[2 * i + 1] = total_padding - left_pad
         else:
             self._reversed_padding_repeated_twice = _reverse_repeat_tuple(self.padding, 2)  # type: ignore
 
@@ -176,17 +170,11 @@ class Conv2dSame(nn.Conv2d):
     def forward(self, input: Tensor) -> Tensor:
         ih, iw = input.size()[-2:]
 
-        pad_h = self.calc_same_pad(
-            i=ih, k=self.kernel_size[0], s=self.stride[0], d=self.dilation[0]
-        )
-        pad_w = self.calc_same_pad(
-            i=iw, k=self.kernel_size[1], s=self.stride[1], d=self.dilation[1]
-        )
+        pad_h = self.calc_same_pad(i=ih, k=self.kernel_size[0], s=self.stride[0], d=self.dilation[0])
+        pad_w = self.calc_same_pad(i=iw, k=self.kernel_size[1], s=self.stride[1], d=self.dilation[1])
 
         if pad_h > 0 or pad_w > 0:
-            input = F.pad(
-                input, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2]
-            )
+            input = F.pad(input, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
         return F.conv2d(
             input,
             self.weight,

@@ -126,9 +126,7 @@ def get_layer_config(src: Layer) -> dict:
         # Permute axis to match channel-first mode
         # i.e. N x ... x C will become N x C x ....
         ndim = len(src.input_shape[0])
-        assert (
-            -1 <= src.axis <= ndim
-        ), f"Invalid concatenation axis {src.axis} ({ndim} dimensions)"
+        assert -1 <= src.axis <= ndim, f"Invalid concatenation axis {src.axis} ({ndim} dimensions)"
         match src.axis:
             case -1:
                 axis = 1
@@ -176,9 +174,7 @@ def get_layer_config(src: Layer) -> dict:
             params["bias"] = src.weights[1].numpy()
         return {"type": "Dense", "params": params}
 
-    assert (
-        False
-    ), f"Layer {src.__class__.__name__.split('.')[-1]} not implemented (yet?)"
+    assert False, f"Layer {src.__class__.__name__.split('.')[-1]} not implemented (yet?)"
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -216,9 +212,7 @@ def to_json(
         relevant_nodes += v
 
     # Find name of InputLayers
-    input_layers = [
-        layer.name for layer in source.layers if isinstance(layer, InputLayer)
-    ]
+    input_layers = [layer.name for layer in source.layers if isinstance(layer, InputLayer)]
 
     # Find all inbound nodes for all layers
     for layer in source.layers:
@@ -312,13 +306,22 @@ def to_json(
 
         # If tensor value is not used straight away, save it
         num_outbounds = len(graph[name]["outbounds"])
-        if (num_outbounds > 1) or (
-            num_outbounds == 1 and exec_order[idx + 1] != graph[name]["outbounds"][0]
-        ):
+        if (num_outbounds > 1) or (num_outbounds == 1 and exec_order[idx + 1] != graph[name]["outbounds"][0]):
             exec_conf["save"] = True
             stack.append(name)
         layers_conf[name]["exec"] = exec_conf
 
+    input_shapes = []
+    for name in inputs:
+        input_shape = list(source.get_layer(name).input_shape[1:])  # type: ignore
+        # Channel first
+        input_shape = [input_shape[-1]] + input_shape[:-1]
+        input_shapes.append(input_shape)
+
     # Save to JSON
     with open(dest, "w") as fout:
-        json.dump({"layers": layers_conf, "exec": exec_order}, fout, cls=NumpyEncoder)
+        json.dump(
+            {"input_shapes": input_shapes, "layers": layers_conf, "exec": exec_order},
+            fout,
+            cls=NumpyEncoder,
+        )

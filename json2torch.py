@@ -114,7 +114,7 @@ def to_torch_layer(conf: dict) -> nn.Module:
             stride=params["stride"],
             padding=params["padding"],
         )
-    
+
     if type_name == "GlobalAveragePool2d":
         return GlobalAveragePool2d(
             kernel_size=params["kernel_size"],
@@ -152,6 +152,9 @@ class ModelFromJson(nn.Module):
         # Read configuration file
         with open(fpath, "r") as fin:
             config = json.load(fin)
+
+        # Input shapes
+        self.input_shapes = config["input_shapes"]
 
         # Execution order
         self.exec_order = config["exec"]
