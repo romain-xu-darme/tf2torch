@@ -73,7 +73,16 @@ def _main():
         from tf2json import to_json
 
         # Load source
-        tf_model = keras.models.load_model(args.model, compile=False)
+        from stderr import stderr_redirector
+        error = None # Store any error to avoid bypassing the finally from stderr_redirector()
+        with stderr_redirector():
+            try:
+                tf_model = keras.models.load_model(args.model, compile=False)
+            except Exception as e:
+                error = e
+        if error is not None:
+            raise error
+
         if hasattr(tf_model, "model"):  # Load exotic models (e.g. _UserObject)
             tf_model = tf_model.model  # type: ignore
         assert isinstance(
