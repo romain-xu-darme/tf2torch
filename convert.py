@@ -61,7 +61,16 @@ def _main():
         metavar="<path_to_file>",
         help="path to Pytorch destination model.",
     )
+    json2pt_parser.add_argument(
+        "-p",
+        "--python",
+        type=str,
+        required=True,
+        metavar="<path_to_python_file>",
+        help="path to Python destination file.",
+    )
     json2pt_parser.add_argument("-v", "--verbose", required=False, action="store_true", help="verbose mode.")
+    json2pt_parser.add_argument("-s", "--sanity", required=False, action="store_true", help="sanity check mode.")
 
     args = ap.parse_args()
 
@@ -109,21 +118,30 @@ def _main():
         if args.verbose:
             print(pt_model)
 
-        # Save to torch format
-        torch.save(pt_model, args.model)
+        module_name = args.python
+        if module_name.endswith(".py"):
+            module_name = module_name[:-3]
+        pt_model.export(args.model, module_name + ".py", "ModelFromJson")
 
-        # Sanity check: create a fake input with the correct size
-        batch_size = 16
-        x = []
-        for shape in pt_model.input_shapes:
-            batch_shape = [
-                batch_size,
-            ] + shape
-            x.append(torch.rand(batch_shape))
-        if len(x) == 1:
-            x = x[0]
-        y = pt_model(x)
-        print(f"Output shape: {y.shape}")
+        if args.sanity:
+            module = __import__(module_name)
+            m = module.ModelFromJson()
+            state_dict = torch.load(args.model, weights_only=True)
+            m.load_state_dict(state_dict)
+            batch_size = 16
+            x = []
+            for shape in m.input_shapes:
+                batch_shape = [
+                    batch_size,
+                ] + shape
+                x.append(torch.rand(batch_shape))
+            if len(x) == 1:
+                x = x[0]
+            m.eval()
+            y = m(x)
+            print('Sanity check passed.')
+            print(f"Output shape: {y.shape}") # TODO: Should we replace the batch size with, e.g., "B"?
+
 
 
 if __name__ == "__main__":

@@ -200,6 +200,8 @@ def to_json(
         input_nodes: List of input nodes. Default: None.
         output_nodes: List of output nodes. Default: None.
     """
+    def rename(name):
+        return name.replace("-", "_")
     ##############################
     # Build graph
     ##############################
@@ -320,6 +322,8 @@ def to_json(
 
     # Save to JSON
     with open(dest, "w") as fout:
+        layers_conf = { rename(k):v for (k,v) in layers_conf.items() }
+        exec_order = [rename(name) for name in exec_order]
         json.dump(
             {"input_shapes": input_shapes, "layers": layers_conf, "exec": exec_order},
             fout,
