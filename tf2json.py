@@ -238,6 +238,37 @@ def to_json(
         for inbound in graph[name]["inbounds"]:
             graph[inbound]["outbounds"].append(name)
 
+    if output_nodes is None:
+        output_nodes = [node_name for node_name, conf in graph.items() if not conf["outbounds"]]
+    else:
+        for output_node in output_nodes:
+            if output_node not in graph:
+                raise ValueError(f"Output node {output_node} not present in graph. Possible typo?")
+    if input_nodes is None:
+        input_nodes = inputs
+    else:
+        for input_node in input_nodes:
+            if input_node not in graph:
+                raise ValueError(f"Input node {input_node} not present in graph. Possible typo?")
+
+    # Graph consistency check: are all output nodes computable using input nodes?
+    def computable(node_name: str) -> bool:
+        if node_name in input_nodes:
+            return True
+        if not graph[node_name]["inbounds"]:
+            return False
+        for inbound in graph[node_name]["inbounds"]:
+            if not computable(inbound):
+                return False
+        return True
+
+    for output_node in output_nodes:
+        if not computable(output_node):
+            raise ValueError(
+                "Graph inconsistency detected. "
+                f"Output node {output_node} cannot be computed from selected inputs {input_nodes}."
+            )
+
     # Remove nodes on paths leading to specific inputs
     if input_nodes is not None:
         inputs = input_nodes
@@ -246,6 +277,10 @@ def to_json(
             for inbound in graph[node_name]["inbounds"]:
                 if graph.get(inbound) is not None:
                     del_upward(inbound)
+                    # Remove it as an input for OTHER outbound nodes
+                    for outbound in graph[inbound]["outbounds"]:
+                        if outbound != node_name:
+                            graph[outbound]["inbounds"].remove(inbound)
                     print(f"Deleting node {inbound}")
                     del graph[inbound]
             graph[node_name]["inbounds"] = []
@@ -260,6 +295,10 @@ def to_json(
             for outbound in graph[node_name]["outbounds"]:
                 if graph.get(outbound) is not None:
                     del_downward(outbound)
+                    # Remove it as an output for OTHER incoming nodes
+                    for inbound in graph[outbound]["inbounds"]:
+                        if inbound != node_name:
+                            graph[inbound]["outbounds"].remove(outbound)
                     print(f"Deleting node {outbound}")
                     del graph[outbound]
             graph[node_name]["outbounds"] = []
