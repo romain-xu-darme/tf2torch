@@ -174,6 +174,18 @@ def get_layer_config(src: Layer) -> dict:
             params["bias"] = src.weights[1].numpy()
         return {"type": "Dense", "params": params}
 
+    if src.__class__.__name__ == "MelSpecLayerSimple":
+        params = { k: src._config[k] for k in [
+                "sample_rate",
+                "frame_step",
+                "frame_length",
+                "fmin",
+                "fmax",
+        ]}
+        params["spec_shape"] = src._config["spec_shape"]
+        return {"type": "MelSpecLayerSimple", "params": params}
+
+
     assert False, f"Layer {src.__class__.__name__.split('.')[-1]} not implemented (yet?)"
 
 
@@ -252,14 +264,19 @@ def to_json(
                 raise ValueError(f"Input node {input_node} not present in graph. Possible typo?")
 
     # Graph consistency check: are all output nodes computable using input nodes?
+    known_computable = set()
     def computable(node_name: str) -> bool:
+        if node_name in known_computable:
+            return True
         if node_name in input_nodes:
+            known_computable.add(node_name)
             return True
         if not graph[node_name]["inbounds"]:
             return False
         for inbound in graph[node_name]["inbounds"]:
             if not computable(inbound):
                 return False
+        known_computable.add(node_name)
         return True
 
     for output_node in output_nodes:
@@ -268,6 +285,7 @@ def to_json(
                 "Graph inconsistency detected. "
                 f"Output node {output_node} cannot be computed from selected inputs {input_nodes}."
             )
+    del known_computable
 
     # Remove nodes on paths leading to specific inputs
     if input_nodes is not None:
@@ -333,10 +351,11 @@ def to_json(
 
     # Compute index of inbound tensors
     stack = inputs.copy()
+    stack = ['input']
     for idx, name in enumerate(exec_order):
         exec_conf = {"src": [], "save": False}
         if name in inputs:
-            exec_conf["src"].append(-1)
+            exec_conf["src"].append(0)
         for inbound in graph[name]["inbounds"]:
             # Simple case: use previous tensor
             if exec_order[idx - 1] == inbound:
