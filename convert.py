@@ -20,10 +20,10 @@ def _main():
         "-i",
         "--inputs",
         type=str,
-        nargs="+",
         required=False,
         metavar="<name>",
         help="name of input layers.",
+        action="append",
     )
     tf2json_parser.add_argument(
         "-o",

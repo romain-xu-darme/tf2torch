@@ -1,6 +1,7 @@
 import torch
 import json
 from torch_layers import *
+from melspec import MelSpecLayerSimple
 
 
 def to_torch_layer(conf: dict, name: str) -> tuple[nn.Module, set[str], list[str]]:
@@ -71,6 +72,8 @@ def to_torch_layer(conf: dict, name: str) -> tuple[nn.Module, set[str], list[str
                     padding=params["padding"],
                     bias=params["use_bias"],
                     groups=params["groups"],
+                    expected_ih=params["ih"],
+                    expected_iw=params["iw"],
                 ), f"""Conv2dSame(
                     in_channels={params["in_channels"]},
                     out_channels={params["out_channels"]},
@@ -79,6 +82,8 @@ def to_torch_layer(conf: dict, name: str) -> tuple[nn.Module, set[str], list[str
                     padding={int_or_keyword(params["padding"])},
                     bias={params["use_bias"]},
                     groups={params["groups"]},
+                    expected_ih={params["ih"]},
+                    expected_iw={params["iw"]},
                 )"""
                 imports.add("from torch_layers import Conv2dSame")
             else:
@@ -234,6 +239,28 @@ def to_torch_layer(conf: dict, name: str) -> tuple[nn.Module, set[str], list[str
             [f"{name} = ChannelWiseSoftmax()"]
         )
 
+    if type_name == "MelSpecLayerSimple":
+        descr = f"""MelSpecLayerSimple(
+                sample_rate={params["sample_rate"]},
+                spec_shape={params["spec_shape"]},
+                frame_step={params["frame_step"]},
+                frame_length={params["frame_length"]},
+                fmin={params["fmin"]},
+                fmax={params["fmax"]},
+            )"""
+        return (
+            MelSpecLayerSimple(
+                sample_rate=params["sample_rate"],
+                spec_shape=params["spec_shape"],
+                frame_step=params["frame_step"],
+                frame_length=params["frame_length"],
+                fmin=params["fmin"],
+                fmax=params["fmax"],
+            ),
+            set(["from melspec import MelSpecLayerSimple"]),
+            [f"""{name} = {cleanify_string(descr)}"""]
+        )
+
     assert False, f"Layer {type_name} not implemented (yet?)"
 
 
@@ -332,18 +359,25 @@ class ModelFromJson(nn.Module):
             pr("")
 
             # forward
-            pr("def forward(self, X: torch.Tensor) -> torch.Tensor:")
+            pr("def forward(self, Xs: torch.Tensor|list[torch.Tensor]) -> torch.Tensor:")
             pr.inc()
             current_index = 0
-            pr("X_0 = X")
+            if len(self.input_shapes) == 1:
+                pr(f"X_{current_index} = Xs")
+                current_index += 1
+            else:
+                for _ in self.input_shapes:
+                    pr(f"X_{current_index} = Xs[{current_index}]")
+                    current_index += 1
+
             for name in self.exec_order:
                 indices = self.exec_conf[name]["src"]
                 indices = [ "X" if i == -1 else f"X_{i}" for i in indices ]
                 params = indices[0] if len(indices) == 1 else f"""[{",".join(indices)}]"""
                 pr(f"""X = self.{name}({params})""")
                 if self.exec_conf[name]["save"]:
-                    current_index += 1
                     pr(f"""X_{current_index} = X""")
+                    current_index += 1
             pr(f"return X")
             pr.dec()
 
