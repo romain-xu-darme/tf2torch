@@ -49,6 +49,8 @@ def get_layer_config(src: Layer) -> dict:
             "use_bias": src.use_bias,
             "activation": src.activation.__name__,
             "weights": np.moveaxis(np.moveaxis(src.weights[0], -1, 0), -1, 1),
+            "ih": src.input_shape[1],
+            "iw": src.input_shape[2],
         }
         if src.bias is not None:
             params["bias"] = src.weights[1].numpy()
@@ -197,6 +199,25 @@ class NumpyEncoder(json.JSONEncoder):
             return o.tolist()
         return json.JSONEncoder.default(self, o)
 
+def rename_layer(name: str) -> str:
+    r"""Provides an alternate name to the layer.
+    It excludes character '-' and adds a '_tf' suffix to avoid conflicts
+    when using a conv extraction.
+
+    This method does *not* guarantee unicity of output
+    (there exist pairs of names [n1] and [n2] such that
+    [n1 != n2] and yet [rename_layer(n1) != rename_layer(n2)]).
+    It's been decided to exclude this feature to avoid making names too long,
+    but we might revert the decision.
+
+    Args:
+        name: Name of the tf layer.
+
+    Returns:
+        A different name to the layer that will be used by torch.
+    """
+    name = name.replace("-", "_") + "_tf"
+    return name
 
 def to_json(
     source: keras.src.engine.functional.Functional,
@@ -212,8 +233,6 @@ def to_json(
         input_nodes: List of input nodes. Default: None.
         output_nodes: List of output nodes. Default: None.
     """
-    def rename(name):
-        return name.replace("-", "_")
     ##############################
     # Build graph
     ##############################
@@ -255,13 +274,13 @@ def to_json(
     else:
         for output_node in output_nodes:
             if output_node not in graph:
-                raise ValueError(f"Output node {output_node} not present in graph. Possible typo?")
+                raise ValueError(f"Output node {output_node} not present in graph. Options were {graph.keys()}.")
     if input_nodes is None:
         input_nodes = inputs
     else:
         for input_node in input_nodes:
             if input_node not in graph:
-                raise ValueError(f"Input node {input_node} not present in graph. Possible typo?")
+                raise ValueError(f"Input node {input_node} not present in graph. Options were {graph.keys()}.")
 
     # Graph consistency check: are all output nodes computable using input nodes?
     known_computable = set()
@@ -286,6 +305,15 @@ def to_json(
                 f"Output node {output_node} cannot be computed from selected inputs {input_nodes}."
             )
     del known_computable
+
+    # TODO: check that none of the input is necessary to compute the input of another node
+    # Alternatively, we could perform the [del_upward]/[del_outward] operations first
+    # and then check for graph consistency.
+
+    # TODO:
+    # It's unclear whether the current implementation removes side paths.
+    # For instance, in graph {A->B ; B->C ; B->D ; C->E ; D->E} with input A and output C,
+    # is D removed?
 
     # Remove nodes on paths leading to specific inputs
     if input_nodes is not None:
@@ -350,12 +378,26 @@ def to_json(
         add_children(name)
 
     # Compute index of inbound tensors
-    stack = inputs.copy()
-    stack = ['input']
+    input_tensors = []
+    for input_name in inputs:
+        input = source.get_layer(input_name)
+        for node in input._inbound_nodes:
+            for input_node, _, _, _ in node.iterate_inbound():
+                name = input_node.name
+                if name not in input_tensors:
+                    input_tensors.append(name)
+
+    stack = input_tensors.copy()
     for idx, name in enumerate(exec_order):
         exec_conf = {"src": [], "save": False}
         if name in inputs:
-            exec_conf["src"].append(0)
+            identified_inputs = []
+            for node in input._inbound_nodes:
+                for input_node, _, _, _ in node.iterate_inbound():
+                    input_node_name = input_node.name
+                    if input_node_name not in identified_inputs:
+                        identified_inputs.append(input_node_name)
+                        exec_conf["src"].append(stack.index(input_node_name))
         for inbound in graph[name]["inbounds"]:
             # Simple case: use previous tensor
             if exec_order[idx - 1] == inbound:
@@ -372,16 +414,18 @@ def to_json(
         layers_conf[name]["exec"] = exec_conf
 
     input_shapes = []
-    for name in inputs:
-        input_shape = list(source.get_layer(name).input_shape[1:])  # type: ignore
-        # Channel first
-        input_shape = [input_shape[-1]] + input_shape[:-1]
-        input_shapes.append(input_shape)
+    for input_tensor in input_tensors:
+        output_shape = source.get_layer(input_tensor).output_shape
+        if isinstance(output_shape, list):
+            for output_shape in output_shape:
+                input_shapes.append(output_shape[1:])
+        else:
+            input_shapes.append(output_shape[1:])
 
     # Save to JSON
     with open(dest, "w") as fout:
-        layers_conf = { rename(k):v for (k,v) in layers_conf.items() }
-        exec_order = [rename(name) for name in exec_order]
+        layers_conf = { rename_layer(k):v for (k,v) in layers_conf.items() }
+        exec_order = [rename_layer(name) for name in exec_order]
         json.dump(
             {"input_shapes": input_shapes, "layers": layers_conf, "exec": exec_order},
             fout,

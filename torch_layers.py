@@ -49,7 +49,8 @@ class Concatenate(nn.Module):
 class Reshape(nn.Module):
     def __init__(self, shape: list[int]):
         super().__init__()
-        self.shape = shape
+        self.shape = shape.copy()
+        self.shape.insert(0, -1)
 
     def forward(self, X: Tensor) -> Tensor:
         r"""Reshapes a tensor
@@ -57,7 +58,7 @@ class Reshape(nn.Module):
         Args:
             X: Input tensor.
         """
-        return torch.reshape(X, shape=[X.shape[0]] + self.shape)
+        return torch.reshape(X, shape=self.shape)
 
 
 class GlobalAveragePool2d(nn.AvgPool2d):
@@ -82,6 +83,8 @@ class Conv2dSame(nn.Conv2d):
         in_channels: int,
         out_channels: int,
         kernel_size: _size_2_t,
+        expected_ih: int,
+        expected_iw: int,
         stride: _size_2_t = 1,
         padding: Union[str, _size_2_t] = 0,
         dilation: _size_2_t = 1,
@@ -127,6 +130,11 @@ class Conv2dSame(nn.Conv2d):
         self.output_padding = output_padding
         self.groups = groups
         self.padding_mode = padding_mode
+
+        # Computes the pad based on expected size of input images.
+        self.pad_h = self.calc_same_pad(i=expected_ih, k=self.kernel_size[0], s=self.stride[0], d=self.dilation[0])
+        self.pad_w = self.calc_same_pad(i=expected_iw, k=self.kernel_size[1], s=self.stride[1], d=self.dilation[1])
+
         # `_reversed_padding_repeated_twice` is the padding to be passed to
         # `F.pad` if needed (e.g., for non-zero padding types that are
         # implemented as two ops: padding + conv). `F.pad` accepts paddings in
@@ -168,11 +176,8 @@ class Conv2dSame(nn.Conv2d):
         return max((ceil(i / s) - 1) * s + (k - 1) * d + 1 - i, 0)
 
     def forward(self, input: Tensor) -> Tensor:
-        ih, iw = input.size()[-2:]
-
-        pad_h = self.calc_same_pad(i=ih, k=self.kernel_size[0], s=self.stride[0], d=self.dilation[0])
-        pad_w = self.calc_same_pad(i=iw, k=self.kernel_size[1], s=self.stride[1], d=self.dilation[1])
-
+        pad_h = self.pad_h
+        pad_w = self.pad_w
         if pad_h > 0 or pad_w > 0:
             input = F.pad(input, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
         return F.conv2d(
